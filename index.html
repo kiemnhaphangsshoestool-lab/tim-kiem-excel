@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tìm Kiếm Excel — Online</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root{
+    --paper:#F2F0E7;
+    --paper-2:#E9E5D8;
+    --ink:#1B1F1C;
+    --ink-soft:#4B5049;
+    --amber:#F2A900;
+    --amber-dark:#C6890A;
+    --steel:#2F4858;
+    --line:#CFC8B4;
+    --ok:#3E7C4A;
+    --radius:2px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    padding-bottom:60px;
+  }
+  .barcode-strip{
+    height:14px;
+    width:100%;
+    background:repeating-linear-gradient(90deg,
+      var(--ink) 0px, var(--ink) 2px,
+      transparent 2px, transparent 5px,
+      var(--ink) 5px, var(--ink) 6px,
+      transparent 6px, transparent 10px,
+      var(--ink) 10px, var(--ink) 13px,
+      transparent 13px, transparent 16px);
+    opacity:0.85;
+  }
+  header{
+    background:var(--ink);
+    color:var(--paper);
+    padding:22px 20px 26px;
+  }
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--amber);
+    margin-bottom:6px;
+  }
+  h1{
+    font-family:'Oswald',sans-serif;
+    font-weight:700;
+    font-size:clamp(26px,6vw,36px);
+    text-transform:uppercase;
+    letter-spacing:0.02em;
+    margin:0;
+  }
+  .sub{
+    font-size:13px;
+    color:#C9C5B8;
+    margin-top:6px;
+    max-width:520px;
+  }
+
+  main{
+    max-width:720px;
+    margin:0 auto;
+    padding:20px 16px 0;
+  }
+
+  .panel{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:16px;
+    margin-bottom:16px;
+  }
+  .panel-title{
+    font-family:'Oswald',sans-serif;
+    font-weight:600;
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--steel);
+    margin:0 0 12px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .panel-title::before{
+    content:"";
+    width:8px;height:8px;
+    background:var(--amber);
+    display:inline-block;
+  }
+
+  .source-row{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .btn{
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:14px;
+    padding:11px 16px;
+    border:1.5px solid var(--ink);
+    background:var(--paper);
+    color:var(--ink);
+    border-radius:var(--radius);
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    transition:transform .08s ease, background .15s ease;
+  }
+  .btn:active{transform:scale(0.97);}
+  .btn:hover{background:var(--paper-2);}
+  .btn-primary{
+    background:var(--amber);
+    border-color:var(--amber-dark);
+    color:var(--ink);
+  }
+  .btn-primary:hover{background:var(--amber-dark);}
+  .btn-ghost{
+    border-color:var(--line);
+    font-size:13px;
+    padding:8px 12px;
+  }
+  input[type=file]{display:none;}
+
+  .sheet-input-row{
+    display:flex;
+    gap:8px;
+    margin-top:10px;
+  }
+  input[type=text], input[type=url]{
+    flex:1;
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    padding:10px 10px;
+    border:1.5px solid var(--line);
+    border-radius:var(--radius);
+    background:var(--paper);
+    color:var(--ink);
+  }
+  input[type=text]:focus, input[type=url]:focus, #searchBox:focus{
+    outline:2px solid var(--amber);
+    outline-offset:1px;
+    border-color:var(--amber-dark);
+  }
+  .hint{
+    font-size:11.5px;
+    color:var(--ink-soft);
+    margin-top:8px;
+    line-height:1.5;
+  }
+  .hint a{color:var(--steel);}
+
+  .status-line{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    color:var(--ink-soft);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-top:4px;
+  }
+  .status-dot{
+    width:8px;height:8px;border-radius:50%;
+    background:#B7B2A0;
+    display:inline-block;
+    margin-right:6px;
+  }
+  .status-dot.loaded{background:var(--ok);}
+
+  .search-wrap{
+    position:sticky;
+    top:0;
+    z-index:5;
+    background:var(--paper);
+    padding-top:6px;
+    padding-bottom:10px;
+  }
+  .search-box{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    background:#fff;
+    border:2px solid var(--ink);
+    border-radius:var(--radius);
+    padding:4px 4px 4px 14px;
+  }
+  .search-box svg{flex-shrink:0;}
+  #searchBox{
+    border:none;
+    padding:12px 4px;
+    font-size:16px;
+    font-family:'JetBrains Mono',monospace;
+    background:transparent;
+  }
+  #searchBox:focus{outline:none;}
+  .scan-btn{
+    background:var(--ink);
+    color:var(--paper);
+    border:none;
+    border-radius:var(--radius);
+    padding:12px 14px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    cursor:pointer;
+    font-family:'Oswald',sans-serif;
+    font-size:12px;
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+    font-weight:600;
+    white-space:nowrap;
+  }
+  .scan-btn:active{transform:scale(0.96);}
+
+  #resultsCount{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    color:var(--ink-soft);
+    margin:2px 2px 12px;
+  }
+
+  .results{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .tag-card{
+    background:#fff;
+    border:1.5px dashed var(--line);
+    border-radius:var(--radius);
+    padding:14px 16px;
+    position:relative;
+    overflow:hidden;
+  }
+  .tag-card::before{
+    content:"";
+    position:absolute;
+    left:0; top:0; bottom:0;
+    width:4px;
+    background:var(--amber);
+  }
+  .tag-title{
+    font-family:'Oswald',sans-serif;
+    font-weight:600;
+    font-size:16px;
+    letter-spacing:0.01em;
+    margin-bottom:6px;
+    padding-left:6px;
+  }
+  .tag-rows{
+    padding-left:6px;
+    display:grid;
+    grid-template-columns:auto 1fr;
+    gap:3px 12px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+  }
+  .tag-key{color:var(--ink-soft);}
+  .tag-val{color:var(--ink);word-break:break-word;}
+  mark{
+    background:var(--amber);
+    color:var(--ink);
+    padding:0 1px;
+  }
+
+  .empty-state{
+    text-align:center;
+    padding:50px 20px;
+    color:var(--ink-soft);
+    font-family:'JetBrains Mono',monospace;
+    font-size:13px;
+  }
+  .empty-state .big{
+    font-family:'Oswald',sans-serif;
+    font-size:18px;
+    color:var(--ink);
+    text-transform:uppercase;
+    margin-bottom:8px;
+    font-weight:600;
+  }
+
+  /* modal quét mã vạch */
+  .modal-overlay{
+    position:fixed; inset:0;
+    background:rgba(27,31,28,0.92);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:50;
+    flex-direction:column;
+    padding:20px;
+  }
+  .modal-overlay.open{display:flex;}
+  #qr-reader{
+    width:100%;
+    max-width:420px;
+    border:2px solid var(--amber);
+    border-radius:var(--radius);
+    overflow:hidden;
+  }
+  .modal-close{
+    margin-top:16px;
+    background:var(--amber);
+    border:none;
+    color:var(--ink);
+    font-family:'Oswald',sans-serif;
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    padding:12px 24px;
+    border-radius:var(--radius);
+    cursor:pointer;
+  }
+  .modal-label{
+    color:var(--paper);
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    margin-bottom:10px;
+    text-align:center;
+  }
+
+  footer{
+    max-width:720px;
+    margin:24px auto 0;
+    padding:0 16px;
+    font-size:11px;
+    color:var(--ink-soft);
+    font-family:'JetBrains Mono',monospace;
+    text-align:center;
+  }
+
+  @media (max-width:420px){
+    .tag-rows{grid-template-columns:1fr;}
+    .tag-key{margin-top:4px;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">// công cụ nội bộ — không cần cài đặt</div>
+  <h1>Tìm Kiếm Excel</h1>
+  <div class="sub">Mở file .xlsx trên máy hoặc đăng nhập Google để tìm trong Sheet riêng tư, rồi gõ hoặc quét mã vạch để tìm ngay.</div>
+</header>
+<div class="barcode-strip"></div>
+
+<main>
+
+  <section class="panel">
+    <p class="panel-title">Nguồn dữ liệu</p>
+    <div class="source-row">
+      <label class="btn btn-primary" for="fileInput">📂 Mở file Excel (.xlsx)</label>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+      <button class="btn" id="togglePrivateInput">🔒 Google Sheet riêng tư</button>
+      <button class="btn btn-ghost" id="clearBtn">Xoá dữ liệu</button>
+    </div>
+
+    <!-- Sheet riêng tư: cần đăng nhập Google (OAuth), không public -->
+    <div id="privateInputBox" style="display:none; margin-top:12px; border-top:1px solid var(--line); padding-top:12px;">
+      <p class="hint">
+        <b>Bước 1 — chỉ làm một lần:</b> dán <b>OAuth Client ID</b> của bạn (xem hướng dẫn tạo bên dưới).
+      </p>
+      <div class="sheet-input-row">
+        <input type="text" id="clientIdInput" placeholder="OAuth Client ID (dạng xxxx.apps.googleusercontent.com)">
+        <button class="btn btn-ghost" id="saveClientId">Lưu</button>
+      </div>
+
+      <p class="hint" style="margin-top:14px;"><b>Bước 1.5 — chỉ định email được phép xem dữ liệu:</b>
+        chỉ những email trong danh sách này mới được phép tải dữ liệu, kể cả khi họ có link trang web.</p>
+      <div class="sheet-input-row">
+        <input type="text" id="allowedEmailsInput" placeholder="email1@gmail.com, email2@gmail.com (cách nhau bởi dấu phẩy)">
+        <button class="btn btn-ghost" id="saveAllowedEmails">Lưu</button>
+      </div>
+
+      <p class="hint" style="margin-top:14px;"><b>Bước 2:</b> đăng nhập bằng tài khoản Google có quyền xem sheet.</p>
+      <div class="source-row" style="margin-top:6px;">
+        <button class="btn btn-primary" id="googleSignInBtn" disabled>🔐 Đăng nhập Google</button>
+        <span id="authStatus" style="align-self:center;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-soft);">Chưa đăng nhập</span>
+      </div>
+
+      <p class="hint" style="margin-top:14px;"><b>Bước 3:</b> dán liên kết Google Sheet riêng tư (link "Chia sẻ" bình thường, không cần xuất bản).</p>
+      <div class="sheet-input-row">
+        <input type="url" id="privateSheetUrl" placeholder="https://docs.google.com/spreadsheets/d/....">
+        <button class="btn btn-primary" id="loadPrivateSheetBtn">Tải</button>
+      </div>
+
+      <details style="margin-top:12px;">
+        <summary class="hint" style="cursor:pointer;color:var(--steel);font-weight:600;">Cách tạo OAuth Client ID (làm 1 lần, mất ~3 phút)</summary>
+        <p class="hint">
+          1. Vào <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a> → tạo project mới.<br>
+          2. Vào "APIs &amp; Services" → "Library" → bật <b>Google Sheets API</b>.<br>
+          3. Vào "APIs &amp; Services" → "Credentials" → "Create Credentials" → <b>OAuth client ID</b> → loại <b>Web application</b>.<br>
+          4. Ở mục "Authorized JavaScript origins", thêm đúng địa chỉ bạn đang mở trang này (vd: <code id="originHint"></code>).<br>
+          5. Sao chép Client ID vừa tạo, dán vào ô Bước 1 ở trên.<br>
+          Trang này chỉ đăng nhập bằng token OAuth trong trình duyệt của bạn — không có máy chủ nào của tôi lưu tài khoản hay dữ liệu Sheet.<br><br>
+          <b>Lưu ý về danh sách email (Bước 1.5):</b> đây là lớp kiểm tra tiện lợi trên trình duyệt, không phải bảo mật máy chủ —
+          người rành kỹ thuật vẫn có thể xoá/sửa được vì đây là trang tĩnh không có backend. Lớp bảo vệ <b>thật sự</b> vẫn là
+          quyền chia sẻ của chính Google Sheet: chỉ cấp <b>"Chia sẻ" (Share)</b> file Sheet cho đúng những email cần dùng,
+          thì dù ai mở link trang web cũng không đăng nhập lấy được dữ liệu nếu Google không cho quyền.
+        </p>
+      </details>
+    </div>
+
+    <div class="status-line">
+      <span><span class="status-dot" id="statusDot"></span><span id="statusText">Chưa có dữ liệu</span></span>
+      <span id="rowCount"></span>
+    </div>
+  </section>
+
+  <div class="search-wrap">
+    <div class="search-box">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B1F1C" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="searchBox" placeholder="Gõ từ khoá hoặc mã vạch..." autocomplete="off">
+      <button class="scan-btn" id="scanBtn">📷 Quét</button>
+    </div>
+    <div id="resultsCount"></div>
+  </div>
+
+  <section class="results" id="results"></section>
+
+</main>
+
+<footer>DỮ LIỆU CHỈ LƯU TRONG TRÌNH DUYỆT CỦA BẠN (localStorage) — KHÔNG GỬI LÊN MÁY CHỦ NÀO</footer>
+
+<div class="modal-overlay" id="scanModal">
+  <div class="modal-label">Đưa mã vạch vào khung hình</div>
+  <div id="qr-reader"></div>
+  <button class="modal-close" id="closeScan">Đóng</button>
+</div>
+
+<script>
+let headers = [];
+let rows = []; // mỗi row: {values: {col: val}}
+let html5QrCode = null;
+
+const el = (id) => document.getElementById(id);
+
+// ---------- Lưu / khôi phục từ localStorage ----------
+function saveState(sourceLabel){
+  try{
+    localStorage.setItem('tke_headers', JSON.stringify(headers));
+    localStorage.setItem('tke_rows', JSON.stringify(rows));
+    localStorage.setItem('tke_source', sourceLabel || '');
+  }catch(e){ console.warn('Không lưu được vào localStorage', e); }
+}
+function restoreState(){
+  try{
+    const h = localStorage.getItem('tke_headers');
+    const r = localStorage.getItem('tke_rows');
+    const s = localStorage.getItem('tke_source');
+    if(h && r){
+      headers = JSON.parse(h);
+      rows = JSON.parse(r);
+      setStatus(true, s || 'Dữ liệu đã lưu trước đó');
+      renderResults('');
+    }
+  }catch(e){}
+}
+
+function setStatus(loaded, label, count){
+  el('statusDot').classList.toggle('loaded', loaded);
+  el('statusText').textContent = label;
+  el('rowCount').textContent = loaded ? `${rows.length} dòng` : '';
+}
+
+// ---------- Đọc file Excel/CSV cục bộ ----------
+el('fileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  setStatus(false, 'Đang đọc file...');
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    try{
+      const data = new Uint8Array(evt.target.result);
+      const workbook = XLSX.read(data, {type:'array'});
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(firstSheet, {header:1, defval:''});
+      loadFromArray(json, `Trên máy: ${file.name}`);
+    }catch(err){
+      setStatus(false, 'Lỗi đọc file: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+// ---------- Google Sheet riêng tư (đăng nhập OAuth, không public) ----------
+let tokenClient = null;
+let accessToken = null;
+let currentUserEmail = null;
+
+el('togglePrivateInput').addEventListener('click', () => {
+  const box = el('privateInputBox');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+});
+
+// Khôi phục danh sách email được phép
+const savedEmails = localStorage.getItem('tke_allowed_emails');
+if(savedEmails){ el('allowedEmailsInput').value = savedEmails; }
+el('saveAllowedEmails').addEventListener('click', () => {
+  localStorage.setItem('tke_allowed_emails', el('allowedEmailsInput').value.trim());
+  el('authStatus').textContent = 'Đã lưu danh sách email. Đăng nhập lại để áp dụng.';
+});
+function getAllowedEmails(){
+  return el('allowedEmailsInput').value
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(e => e.length);
+}
+
+// Hiển thị đúng origin hiện tại để người dùng khai báo trong Google Cloud Console
+el('originHint').textContent = window.location.origin !== 'null' ? window.location.origin : '(mở file này qua http/https, vd host trên GitHub Pages, để lấy được địa chỉ)';
+
+// Khôi phục Client ID đã lưu trước đó
+const savedClientId = localStorage.getItem('tke_client_id');
+if(savedClientId){
+  el('clientIdInput').value = savedClientId;
+  setupTokenClient(savedClientId);
+}
+
+el('saveClientId').addEventListener('click', () => {
+  const id = el('clientIdInput').value.trim();
+  if(!id){ return; }
+  localStorage.setItem('tke_client_id', id);
+  setupTokenClient(id);
+});
+
+function setupTokenClient(clientId){
+  try{
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: 'https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/userinfo.email',
+      callback: async (resp) => {
+        if(resp.error){
+          el('authStatus').textContent = 'Lỗi đăng nhập: ' + resp.error;
+          return;
+        }
+        accessToken = resp.access_token;
+        el('authStatus').textContent = 'Đang kiểm tra quyền truy cập...';
+
+        // Lấy email tài khoản vừa đăng nhập
+        try{
+          const uiRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          });
+          const uiData = await uiRes.json();
+          currentUserEmail = (uiData.email || '').toLowerCase();
+        }catch(e){
+          currentUserEmail = null;
+        }
+
+        const allowed = getAllowedEmails();
+        if(allowed.length && !allowed.includes(currentUserEmail)){
+          accessToken = null;
+          el('authStatus').textContent = `✗ ${currentUserEmail || 'Tài khoản này'} không có trong danh sách được phép.`;
+          return;
+        }
+        el('authStatus').textContent = `✓ Đã đăng nhập: ${currentUserEmail || ''}`;
+      }
+    });
+    el('googleSignInBtn').disabled = false;
+  }catch(e){
+    el('authStatus').textContent = 'Client ID không hợp lệ hoặc Google Identity Services chưa tải xong.';
+  }
+}
+
+el('googleSignInBtn').addEventListener('click', () => {
+  if(!tokenClient){ return; }
+  tokenClient.requestAccessToken({ prompt: accessToken ? '' : 'consent' });
+});
+
+function extractSpreadsheetId(url){
+  const m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  return m ? m[1] : null;
+}
+
+el('loadPrivateSheetBtn').addEventListener('click', async () => {
+  const url = el('privateSheetUrl').value.trim();
+  const spreadsheetId = extractSpreadsheetId(url);
+  if(!spreadsheetId){
+    setStatus(false, 'Liên kết Google Sheet không hợp lệ');
+    return;
+  }
+  if(!accessToken){
+    setStatus(false, 'Cần đăng nhập Google trước (Bước 2), hoặc email chưa được cấp quyền');
+    return;
+  }
+  const allowed = getAllowedEmails();
+  if(allowed.length && !allowed.includes((currentUserEmail || '').toLowerCase())){
+    setStatus(false, `Email ${currentUserEmail || ''} không có trong danh sách được phép truy cập`);
+    return;
+  }
+  setStatus(false, 'Đang tải Sheet riêng tư...');
+  try{
+    // Lấy tên trang tính đầu tiên
+    const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if(!metaRes.ok) throw new Error('HTTP ' + metaRes.status + ' (kiểm tra tài khoản có quyền xem sheet này không)');
+    const meta = await metaRes.json();
+    const sheetName = meta.sheets[0].properties.title;
+
+    // Lấy toàn bộ giá trị của trang tính đó
+    const valuesRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if(!valuesRes.ok) throw new Error('HTTP ' + valuesRes.status);
+    const data = await valuesRes.json();
+    loadFromArray(data.values || [], 'Google Sheet riêng tư (đã đăng nhập)');
+  }catch(err){
+    setStatus(false, 'Lỗi tải dữ liệu: ' + err.message);
+  }
+});
+
+function loadFromArray(arr, sourceLabel){
+  if(!arr || !arr.length){
+    setStatus(false, 'File không có dữ liệu');
+    return;
+  }
+  headers = arr[0].map((h,i) => (h && String(h).trim()) || `Cột ${i+1}`);
+  rows = arr.slice(1).map(r => {
+    const values = {};
+    headers.forEach((h, i) => { values[h] = (r[i] !== undefined && r[i] !== null) ? String(r[i]) : ''; });
+    return {values};
+  }).filter(row => Object.values(row.values).some(v => v.trim() !== ''));
+
+  setStatus(true, sourceLabel, rows.length);
+  saveState(sourceLabel);
+  el('searchBox').value = '';
+  renderResults('');
+}
+
+el('clearBtn').addEventListener('click', () => {
+  headers = []; rows = [];
+  localStorage.removeItem('tke_headers');
+  localStorage.removeItem('tke_rows');
+  localStorage.removeItem('tke_source');
+  setStatus(false, 'Chưa có dữ liệu');
+  el('searchBox').value='';
+  renderResults('');
+});
+
+// ---------- Tìm kiếm ----------
+function highlight(text, q){
+  if(!q) return escapeHtml(text);
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if(idx === -1) return escapeHtml(text);
+  return escapeHtml(text.slice(0,idx)) + '<mark>' + escapeHtml(text.slice(idx, idx+q.length)) + '</mark>' + escapeHtml(text.slice(idx+q.length));
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderResults(query){
+  const container = el('results');
+  const q = query.trim().toLowerCase();
+
+  if(!headers.length){
+    container.innerHTML = `<div class="empty-state"><div class="big">Chưa có dữ liệu</div>Mở một file Excel hoặc dán liên kết Google Sheet ở trên để bắt đầu tìm kiếm.</div>`;
+    el('resultsCount').textContent = '';
+    return;
+  }
+
+  const filtered = q ? rows.filter(r => Object.values(r.values).some(v => v.toLowerCase().includes(q))) : rows;
+  el('resultsCount').textContent = `${filtered.length} / ${rows.length} kết quả`;
+
+  if(!filtered.length){
+    container.innerHTML = `<div class="empty-state"><div class="big">Không tìm thấy</div>Không có dòng nào khớp với "${escapeHtml(query)}".</div>`;
+    return;
+  }
+
+  const firstCol = headers[0];
+  const restCols = headers.slice(1);
+
+  container.innerHTML = filtered.slice(0, 300).map(r => {
+    const title = r.values[firstCol] || '(không có)';
+    const restHtml = restCols.map(col => {
+      const val = r.values[col];
+      if(!val) return '';
+      return `<span class="tag-key">${escapeHtml(col)}</span><span class="tag-val">${highlight(val, q)}</span>`;
+    }).join('');
+    return `<div class="tag-card">
+      <div class="tag-title">${highlight(title, q)}</div>
+      <div class="tag-rows">${restHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+el('searchBox').addEventListener('input', (e) => renderResults(e.target.value));
+
+// ---------- Quét mã vạch bằng camera ----------
+el('scanBtn').addEventListener('click', () => {
+  el('scanModal').classList.add('open');
+  html5QrCode = new Html5Qrcode("qr-reader");
+  const config = { fps: 10, qrbox: { width: 250, height: 140 } };
+  html5QrCode.start(
+    { facingMode: "environment" },
+    config,
+    (decodedText) => {
+      el('searchBox').value = decodedText;
+      renderResults(decodedText);
+      stopScan();
+    },
+    () => { /* lỗi từng khung hình, bỏ qua */ }
+  ).catch((err) => {
+    el('qr-reader').innerHTML = `<p style="color:#fff;padding:20px;font-family:monospace;font-size:13px;">Không mở được camera: ${err}. Trên iPhone/Safari cần cấp quyền camera cho trang này, hoặc dùng trình duyệt khác.</p>`;
+  });
+});
+
+function stopScan(){
+  if(html5QrCode){
+    html5QrCode.stop().then(() => html5QrCode.clear()).catch(()=>{});
+  }
+  el('scanModal').classList.remove('open');
+}
+el('closeScan').addEventListener('click', stopScan);
+
+// ---------- Khởi động ----------
+restoreState();
+</script>
+
+</body>
+</html>

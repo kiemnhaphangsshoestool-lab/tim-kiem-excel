@@ -283,14 +283,34 @@
     width:4px;
     background:var(--amber);
   }
+  .tag-title-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    padding-left:6px;
+  }
   .tag-title{
     font-family:'Oswald',sans-serif;
     font-weight:600;
     font-size:16px;
     letter-spacing:0.01em;
     margin-bottom:6px;
-    padding-left:6px;
   }
+  .speak-btn{
+    flex-shrink:0;
+    background:var(--amber);
+    border:1.5px solid var(--amber-dark);
+    border-radius:50%;
+    width:34px;
+    height:34px;
+    font-size:16px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .speak-btn:active{transform:scale(0.9);}
   .tag-rows{
     padding-left:6px;
     display:grid;
@@ -462,6 +482,9 @@
       <button class="scan-btn" id="scanBtn">📷 Quét</button>
     </div>
     <div id="resultsCount"></div>
+    <div class="source-row" id="groupSpeakRow" style="display:none; margin-top:6px;">
+      <button class="btn btn-primary" id="groupSpeakBtn" style="padding:8px 14px;font-size:13px;">🔊 Đọc khoảng giá (thấp nhất – cao nhất)</button>
+    </div>
   </div>
 
   <section class="results" id="results"></section>
@@ -727,8 +750,9 @@ function renderResults(query){
 
   const firstCol = headers[0];
   const restCols = headers.slice(1);
+  window.__lastFiltered = filtered; // lưu tạm để nút loa tra lại đúng dòng khi bấm
 
-  container.innerHTML = filtered.slice(0, 300).map(r => {
+  container.innerHTML = filtered.slice(0, 300).map((r, i) => {
     const title = r.values[firstCol] || '(không có)';
     const restHtml = restCols.map(col => {
       const val = r.values[col];
@@ -736,18 +760,70 @@ function renderResults(query){
       return `<span class="tag-key">${escapeHtml(col)}</span><span class="tag-val">${highlight(val, q)}</span>`;
     }).join('');
     return `<div class="tag-card">
-      <div class="tag-title">${highlight(title, q)}</div>
+      <div class="tag-title-row">
+        <div class="tag-title">${highlight(title, q)}</div>
+        <button class="speak-btn" data-idx="${i}" title="Đọc to sản phẩm này">🔊</button>
+      </div>
       <div class="tag-rows">${restHtml}</div>
     </div>`;
   }).join('');
 
-  // Khi kết quả thu hẹp còn đúng 1 sản phẩm, tự động đọc to giá bán / cảnh báo hết hàng
+  // Nếu tất cả kết quả đang lọc thuộc cùng 1 mã sản phẩm cha (nhiều size/màu khác nhau),
+  // hiện nút đọc khoảng giá thấp nhất - cao nhất của cả nhóm.
+  const groupParentRows = getSameParentGroup(filtered);
+  if(groupParentRows){
+    el('groupSpeakRow').style.display = 'flex';
+    window.__lastGroup = groupParentRows;
+    el('groupSpeakBtn').textContent = isSamePriceGroup(groupParentRows) ? '🔊 Đọc giá' : '🔊 Đọc khoảng giá (thấp nhất – cao nhất)';
+  }else{
+    el('groupSpeakRow').style.display = 'none';
+    window.__lastGroup = null;
+  }
+
+  // Tự động đọc: đúng 1 sản phẩm -> đọc giá đơn; nhiều sản phẩm cùng mã cha -> đọc khoảng giá
   if(filtered.length === 1){
     scheduleAnnounce(filtered[0]);
+  }else if(groupParentRows){
+    scheduleAnnounceGroup(groupParentRows);
   }else{
     cancelPendingAnnounce();
   }
 }
+
+// Trả về mảng rows nếu TẤT CẢ các dòng đang lọc có cùng giá trị ở cột "mã ... cha"; ngược lại null
+function getSameParentGroup(filteredRows){
+  if(filteredRows.length < 2) return null;
+  const parentCol = findColumnByKeywords(headers, ['cha']);
+  if(!parentCol) return null;
+  const firstVal = filteredRows[0].get(parentCol);
+  if(!firstVal) return null;
+  const allSame = filteredRows.every(r => r.get(parentCol) === firstVal);
+  return allSame ? filteredRows : null;
+}
+
+function isSamePriceGroup(groupRows){
+  const priceCol = findColumnByKeywords(headers, ['giá']);
+  if(!priceCol) return true;
+  const prices = groupRows
+    .map(r => parseFloat((r.get(priceCol) || '').replace(/[^\d.-]/g, '')))
+    .filter(p => !isNaN(p));
+  if(!prices.length) return true;
+  return Math.min(...prices) === Math.max(...prices);
+}
+
+// Bấm nút loa trên từng thẻ kết quả -> đọc ngay lập tức (luôn hoạt động vì là cú bấm tay trực tiếp)
+el('results').addEventListener('click', (e) => {
+  const btn = e.target.closest('.speak-btn');
+  if(!btn) return;
+  const idx = parseInt(btn.dataset.idx, 10);
+  const row = (window.__lastFiltered || [])[idx];
+  if(row) announceRow(row);
+});
+
+// Bấm nút đọc khoảng giá cả nhóm (cùng mã cha)
+el('groupSpeakBtn').addEventListener('click', () => {
+  if(window.__lastGroup) announceGroup(window.__lastGroup);
+});
 
 el('searchBox').addEventListener('input', (e) => renderResults(e.target.value));
 
@@ -771,6 +847,16 @@ function scheduleAnnounce(row){
   }, 500);
 }
 
+function scheduleAnnounceGroup(groupRows){
+  const key = 'GROUP:' + groupRows.map(r => JSON.stringify(r.values)).join('|');
+  if(key === lastAnnouncedKey) return;
+  cancelPendingAnnounce();
+  announceTimer = setTimeout(() => {
+    lastAnnouncedKey = key;
+    announceGroup(groupRows);
+  }, 500);
+}
+
 function findColumnByKeywords(cols, keywords){
   return cols.find(h => keywords.some(k => h.toLowerCase().includes(k)));
 }
@@ -783,6 +869,17 @@ function speak(text){
   utter.rate = 1;
   window.speechSynthesis.speak(utter);
 }
+
+// Một số trình duyệt (đặc biệt Safari/iPhone) chỉ cho phép đọc loa nếu lần đọc ĐẦU TIÊN
+// trong trang bắt nguồn trực tiếp từ một cú chạm/bấm của người dùng. "Mở khoá" bằng cách
+// đọc một chuỗi rỗng ngay lần chạm đầu tiên vào trang.
+let speechUnlocked = false;
+document.addEventListener('click', function unlockSpeech(){
+  if(speechUnlocked || !('speechSynthesis' in window)) return;
+  const warm = new SpeechSynthesisUtterance('');
+  window.speechSynthesis.speak(warm);
+  speechUnlocked = true;
+}, { once: true });
 
 function announceRow(row){
   if(!headers.length) return;
@@ -809,6 +906,50 @@ function announceRow(row){
   if(outOfStock){
     text += '. Sản phẩm này đã hết hàng, vui lòng kiểm tra lại.';
   }
+  if(text) speak(text);
+}
+
+// Đọc cho cả nhóm biến thể cùng 1 mã sản phẩm cha: giá thấp nhất (size/biến thể nhỏ) là "min",
+// giá cao nhất (size/biến thể lớn) là "max". Nếu tất cả các biến thể có cùng 1 giá, chỉ đọc 1 giá.
+function announceGroup(groupRows){
+  if(!headers.length || !groupRows.length) return;
+  const nameCol = headers[0];
+  const priceCol = findColumnByKeywords(headers, ['giá']);
+  const stockCol = findColumnByKeywords(headers, ['tồn kho', 'tồn', 'số lượng', ' sl']);
+
+  const name = groupRows[0].get(nameCol);
+  const parts = [];
+  if(name) parts.push(name);
+
+  if(priceCol){
+    const prices = groupRows
+      .map(r => parseFloat((r.get(priceCol) || '').replace(/[^\d.-]/g, '')))
+      .filter(p => !isNaN(p));
+    if(prices.length){
+      const min = Math.min(...prices);
+      const max = Math.max(...prices);
+      if(min === max){
+        parts.push(`giá ${min} đồng`);
+      }else{
+        parts.push(`giá thấp nhất ${min} đồng, cao nhất ${max} đồng`);
+      }
+    }
+  }
+
+  let text = parts.join(', ');
+
+  if(stockCol){
+    const outCount = groupRows.filter(r => {
+      const s = parseFloat((r.get(stockCol) || '').replace(/[^\d.-]/g, ''));
+      return !isNaN(s) && s <= 0;
+    }).length;
+    if(outCount === groupRows.length){
+      text += '. Tất cả biến thể đã hết hàng, vui lòng kiểm tra lại.';
+    }else if(outCount > 0){
+      text += `. Có ${outCount} biến thể đã hết hàng, vui lòng kiểm tra lại.`;
+    }
+  }
+
   if(text) speak(text);
 }
 

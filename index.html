@@ -773,7 +773,13 @@ function renderResults(query){
   // Chỉ hiện vài cột quan trọng nhất theo mặc định (giá, tồn kho, size, màu, mã...),
   // các cột còn lại gộp vào "Xem thêm chi tiết" để đỡ rối mắt.
   const priorityKeywords = ['giá', 'tồn', 'size', 'màu', 'biến thể', 'sku', 'mã vạch'];
-  const priorityCols = restCols.filter(c => priorityKeywords.some(k => c.toLowerCase().includes(k))).slice(0, 3);
+  let priorityCols = [];
+  priorityKeywords.forEach(k => {
+    restCols.forEach(c => {
+      if(!priorityCols.includes(c) && c.toLowerCase().includes(k)) priorityCols.push(c);
+    });
+  });
+  priorityCols = priorityCols.slice(0, 4);
   const otherCols = restCols.filter(c => !priorityCols.includes(c));
 
   container.innerHTML = filtered.slice(0, 300).map((r, i) => {

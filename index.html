@@ -795,9 +795,9 @@ function getSameParentGroup(filteredRows){
   if(filteredRows.length < 2) return null;
   const parentCol = findColumnByKeywords(headers, ['cha']);
   if(!parentCol) return null;
-  const firstVal = filteredRows[0].get(parentCol);
+  const firstVal = filteredRows[0].values[parentCol];
   if(!firstVal) return null;
-  const allSame = filteredRows.every(r => r.get(parentCol) === firstVal);
+  const allSame = filteredRows.every(r => r.values[parentCol] === firstVal);
   return allSame ? filteredRows : null;
 }
 
@@ -805,7 +805,7 @@ function isSamePriceGroup(groupRows){
   const priceCol = findColumnByKeywords(headers, ['giá']);
   if(!priceCol) return true;
   const prices = groupRows
-    .map(r => parseFloat((r.get(priceCol) || '').replace(/[^\d.-]/g, '')))
+    .map(r => parseFloat((r.values[priceCol] || '').replace(/[^\d.-]/g, '')))
     .filter(p => !isNaN(p));
   if(!prices.length) return true;
   return Math.min(...prices) === Math.max(...prices);
@@ -887,19 +887,19 @@ function announceRow(row){
   const priceCol = findColumnByKeywords(headers, ['giá']);
   const stockCol = findColumnByKeywords(headers, ['tồn kho', 'tồn', 'số lượng', ' sl']);
 
-  const name = row.get(nameCol);
+  const name = row.values[nameCol];
   const parts = [];
   if(name) parts.push(name);
 
   let outOfStock = false;
   if(stockCol){
-    const raw = row.get(stockCol).replace(/[^\d.-]/g, '');
+    const raw = row.values[stockCol].replace(/[^\d.-]/g, '');
     const stockNum = parseFloat(raw);
     if(!isNaN(stockNum) && stockNum <= 0) outOfStock = true;
   }
 
-  if(priceCol && row.get(priceCol)){
-    parts.push(`giá ${row.get(priceCol)} đồng`);
+  if(priceCol && row.values[priceCol]){
+    parts.push(`giá ${row.values[priceCol]} đồng`);
   }
 
   let text = parts.join(', ');
@@ -917,13 +917,13 @@ function announceGroup(groupRows){
   const priceCol = findColumnByKeywords(headers, ['giá']);
   const stockCol = findColumnByKeywords(headers, ['tồn kho', 'tồn', 'số lượng', ' sl']);
 
-  const name = groupRows[0].get(nameCol);
+  const name = groupRows[0].values[nameCol];
   const parts = [];
   if(name) parts.push(name);
 
   if(priceCol){
     const prices = groupRows
-      .map(r => parseFloat((r.get(priceCol) || '').replace(/[^\d.-]/g, '')))
+      .map(r => parseFloat((r.values[priceCol] || '').replace(/[^\d.-]/g, '')))
       .filter(p => !isNaN(p));
     if(prices.length){
       const min = Math.min(...prices);
@@ -940,7 +940,7 @@ function announceGroup(groupRows){
 
   if(stockCol){
     const outCount = groupRows.filter(r => {
-      const s = parseFloat((r.get(stockCol) || '').replace(/[^\d.-]/g, ''));
+      const s = parseFloat((r.values[stockCol] || '').replace(/[^\d.-]/g, ''));
       return !isNaN(s) && s <= 0;
     }).length;
     if(outCount === groupRows.length){

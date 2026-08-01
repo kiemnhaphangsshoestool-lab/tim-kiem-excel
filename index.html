@@ -449,6 +449,9 @@
       <span><span class="status-dot" id="statusDot"></span><span id="statusText">Chưa có dữ liệu</span></span>
       <span id="rowCount"></span>
     </div>
+    <div class="status-line">
+      <button class="btn btn-ghost" id="voiceToggle" style="padding:6px 10px;font-size:11.5px;">🔊 Đọc kết quả: Bật</button>
+    </div>
   </section>
 
   <div class="search-wrap">
@@ -737,9 +740,84 @@ function renderResults(query){
       <div class="tag-rows">${restHtml}</div>
     </div>`;
   }).join('');
+
+  // Khi kết quả thu hẹp còn đúng 1 sản phẩm, tự động đọc to giá bán / cảnh báo hết hàng
+  if(filtered.length === 1){
+    scheduleAnnounce(filtered[0]);
+  }else{
+    cancelPendingAnnounce();
+  }
 }
 
 el('searchBox').addEventListener('input', (e) => renderResults(e.target.value));
+
+// ---------- Đọc kết quả bằng loa (giá bán + cảnh báo hết hàng) ----------
+let announceTimer = null;
+let lastAnnouncedKey = null;
+let voiceEnabled = true;
+
+function cancelPendingAnnounce(){
+  clearTimeout(announceTimer);
+}
+
+function scheduleAnnounce(row){
+  const key = JSON.stringify(row.values);
+  if(key === lastAnnouncedKey) return; // đã đọc dòng này rồi, tránh lặp lại liên tục khi gõ
+  cancelPendingAnnounce();
+  // Đợi 500ms sau khi kết quả ổn định (người dùng ngừng gõ/nói) rồi mới đọc
+  announceTimer = setTimeout(() => {
+    lastAnnouncedKey = key;
+    announceRow(row);
+  }, 500);
+}
+
+function findColumnByKeywords(cols, keywords){
+  return cols.find(h => keywords.some(k => h.toLowerCase().includes(k)));
+}
+
+function speak(text){
+  if(!voiceEnabled || !('speechSynthesis' in window) || !text) return;
+  window.speechSynthesis.cancel(); // ngắt câu đang đọc dở nếu có, tránh chồng tiếng
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'vi-VN';
+  utter.rate = 1;
+  window.speechSynthesis.speak(utter);
+}
+
+function announceRow(row){
+  if(!headers.length) return;
+  const nameCol = headers[0];
+  const priceCol = findColumnByKeywords(headers, ['giá']);
+  const stockCol = findColumnByKeywords(headers, ['tồn kho', 'tồn', 'số lượng', ' sl']);
+
+  const name = row.get(nameCol);
+  const parts = [];
+  if(name) parts.push(name);
+
+  let outOfStock = false;
+  if(stockCol){
+    const raw = row.get(stockCol).replace(/[^\d.-]/g, '');
+    const stockNum = parseFloat(raw);
+    if(!isNaN(stockNum) && stockNum <= 0) outOfStock = true;
+  }
+
+  if(priceCol && row.get(priceCol)){
+    parts.push(`giá ${row.get(priceCol)} đồng`);
+  }
+
+  let text = parts.join(', ');
+  if(outOfStock){
+    text += '. Sản phẩm này đã hết hàng, vui lòng kiểm tra lại.';
+  }
+  if(text) speak(text);
+}
+
+// Nút bật/tắt đọc loa
+el('voiceToggle').addEventListener('click', () => {
+  voiceEnabled = !voiceEnabled;
+  el('voiceToggle').textContent = voiceEnabled ? '🔊 Đọc kết quả: Bật' : '🔇 Đọc kết quả: Tắt';
+  if(!voiceEnabled && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+});
 
 // ---------- Quét mã vạch bằng camera ----------
 // ---------- Nhận dạng giọng nói (Web Speech API) ----------

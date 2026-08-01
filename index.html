@@ -321,6 +321,24 @@
   }
   .tag-key{color:var(--ink-soft);}
   .tag-val{color:var(--ink);word-break:break-word;}
+  .tag-more{
+    margin-top:8px;
+    padding-left:6px;
+  }
+  .tag-more summary{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11.5px;
+    color:var(--steel);
+    cursor:pointer;
+    list-style:none;
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+  }
+  .tag-more summary::-webkit-details-marker{display:none;}
+  .tag-more summary::before{content:"▸";font-size:10px;}
+  .tag-more[open] summary::before{content:"▾";}
+  .tag-more .tag-rows{margin-top:8px;}
   mark{
     background:var(--amber);
     color:var(--ink);
@@ -752,19 +770,34 @@ function renderResults(query){
   const restCols = headers.slice(1);
   window.__lastFiltered = filtered; // lưu tạm để nút loa tra lại đúng dòng khi bấm
 
+  // Chỉ hiện vài cột quan trọng nhất theo mặc định (giá, tồn kho, size, màu, mã...),
+  // các cột còn lại gộp vào "Xem thêm chi tiết" để đỡ rối mắt.
+  const priorityKeywords = ['giá', 'tồn', 'size', 'màu', 'biến thể', 'sku', 'mã vạch'];
+  const priorityCols = restCols.filter(c => priorityKeywords.some(k => c.toLowerCase().includes(k))).slice(0, 3);
+  const otherCols = restCols.filter(c => !priorityCols.includes(c));
+
   container.innerHTML = filtered.slice(0, 300).map((r, i) => {
     const title = r.values[firstCol] || '(không có)';
-    const restHtml = restCols.map(col => {
+
+    const rowHtml = (cols) => cols.map(col => {
       const val = r.values[col];
       if(!val) return '';
       return `<span class="tag-key">${escapeHtml(col)}</span><span class="tag-val">${highlight(val, q)}</span>`;
     }).join('');
+
+    const priorityHtml = rowHtml(priorityCols);
+    const otherHtml = rowHtml(otherCols);
+    const detailsBlock = otherCols.length
+      ? `<details class="tag-more"><summary>Xem thêm chi tiết</summary><div class="tag-rows">${otherHtml}</div></details>`
+      : '';
+
     return `<div class="tag-card">
       <div class="tag-title-row">
         <div class="tag-title">${highlight(title, q)}</div>
         <button class="speak-btn" data-idx="${i}" title="Đọc to sản phẩm này">🔊</button>
       </div>
-      <div class="tag-rows">${restHtml}</div>
+      <div class="tag-rows">${priorityHtml}</div>
+      ${detailsBlock}
     </div>`;
   }).join('');
 

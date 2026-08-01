@@ -706,7 +706,15 @@ function renderResults(query){
     return;
   }
 
-  const filtered = q ? rows.filter(r => Object.values(r.values).some(v => v.toLowerCase().includes(q))) : rows;
+  // So khớp bình thường, và thêm so khớp "rút gọn" (bỏ hết khoảng trắng) để xử lý
+  // trường hợp giọng nói đọc từng chữ số rời rạc ra thành "7 0 0 4" thay vì "7004"
+  const qCompact = q.replace(/[\s,.\-]+/g, '');
+  const filtered = q ? rows.filter(r => Object.values(r.values).some(v => {
+    const vLower = v.toLowerCase();
+    if(vLower.includes(q)) return true;
+    if(qCompact.length >= 3 && vLower.replace(/[\s,.\-]+/g, '').includes(qCompact)) return true;
+    return false;
+  })) : rows;
   el('resultsCount').textContent = `${filtered.length} / ${rows.length} kết quả`;
 
   if(!filtered.length){
@@ -756,6 +764,9 @@ if(SpeechRecognitionAPI){
     for(let i = 0; i < event.results.length; i++){
       transcript += event.results[i][0].transcript;
     }
+    // Gộp các chữ số đơn lẻ cách nhau bởi khoảng trắng (vd "7 0 0 4" -> "7004"),
+    // thường xảy ra khi đọc từng chữ số rời rạc bằng giọng nói.
+    transcript = transcript.replace(/\b(\d)(?:\s+(\d)\b)+/g, (match) => match.replace(/\s+/g, ''));
     el('searchBox').value = transcript;
     renderResults(transcript);
   };

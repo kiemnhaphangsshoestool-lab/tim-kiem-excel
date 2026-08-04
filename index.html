@@ -389,8 +389,22 @@
 
   #productImageWrap{
     display:flex;
-    justify-content:center;
+    flex-direction:column;
+    align-items:center;
     margin-bottom:14px;
+  }
+  #productImageNotice{
+    margin-top:8px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:11.5px;
+    color:var(--ink-soft);
+    background:#fff;
+    border:1px dashed var(--line);
+    border-radius:var(--radius-sm);
+    padding:8px 12px;
+    max-width:320px;
+    text-align:center;
+    display:none;
   }
   #productImage{
     max-width:220px;
@@ -582,6 +596,7 @@
 
   <div id="productImageWrap" style="display:none;">
     <img id="productImage" alt="Ảnh sản phẩm" />
+    <div id="productImageNotice"></div>
   </div>
 
   <section class="results" id="results"></section>
@@ -904,7 +919,7 @@ function renderResults(query){
     tryShowProductImage(filtered[0]);
   }else if(groupParentRows){
     scheduleAnnounceGroup(groupParentRows);
-    hideProductImage();
+    tryShowProductImage(groupParentRows[0]); // cùng mã cha -> dùng chung 1 ảnh đại diện
   }else{
     cancelPendingAnnounce();
     hideProductImage();
@@ -965,7 +980,11 @@ el('chooseImageFolderBtn').addEventListener('click', async () => {
       tryShowProductImage(window.__lastFiltered[0]);
     }
   }catch(e){
-    // Người dùng bấm Huỷ ở hộp chọn thư mục - bỏ qua, không báo lỗi
+    if(e.name !== 'AbortError'){
+      el('imageFolderStatus').textContent = `Lỗi chọn thư mục: ${e.message}`;
+      console.warn('[ảnh sản phẩm] Lỗi chọn thư mục:', e);
+    }
+    // AbortError = người dùng tự bấm Huỷ ở hộp chọn thư mục, không cần báo gì
   }
 });
 
@@ -975,8 +994,7 @@ async function tryShowProductImage(row){
   if(!imageDirHandle){ hideProductImage(); return; }
   const parentCol = findColumnByKeywords(headers, ['cha']);
   if(!parentCol){
-    hideProductImage();
-    console.warn('[ảnh sản phẩm] Không tìm thấy cột nào có chữ "cha" trong tiêu đề file.');
+    showImageNotice('Không tìm thấy cột nào có chữ "cha" trong tiêu đề file, nên chưa xác định được thư mục ảnh.');
     return;
   }
   const parentCode = (row.values[parentCol] || '').trim();
@@ -995,24 +1013,28 @@ async function tryShowProductImage(row){
       }
     }
     if(!found){
-      hideProductImage();
-      showImageNotice(`Thư mục "${parentCode}" có tồn tại nhưng không có file ảnh hợp lệ (.jpg/.png/.webp/.gif) bên trong.`);
+      showImageNotice(`📁 Thư mục "${parentCode}" tồn tại nhưng không có file ảnh hợp lệ (.jpg/.png/.webp/.gif) bên trong.`);
     }
   }catch(e){
-    hideProductImage();
-    showImageNotice(`Không tìm thấy thư mục con tên đúng bằng "${parentCode}" trong thư mục ảnh đã chọn.`);
+    showImageNotice(`📁 Không tìm thấy thư mục con tên đúng bằng "${parentCode}" trong thư mục ảnh đã chọn. Kiểm tra tên thư mục có khớp chính xác (kể cả khoảng trắng, chữ hoa/thường) không.`);
     console.warn('[ảnh sản phẩm] Lỗi khi mở thư mục:', parentCode, e);
   }
 }
 
 function showImageNotice(text){
-  el('imageFolderStatus').textContent = text;
+  el('productImage').style.display = 'none';
+  const notice = el('productImageNotice');
+  notice.textContent = text;
+  notice.style.display = 'block';
+  el('productImageWrap').style.display = 'flex';
 }
 
 function showProductImage(url){
   if(currentImageObjectUrl) URL.revokeObjectURL(currentImageObjectUrl);
   currentImageObjectUrl = url;
   el('productImage').src = url;
+  el('productImage').style.display = 'block';
+  el('productImageNotice').style.display = 'none';
   el('productImageWrap').style.display = 'flex';
 }
 

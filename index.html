@@ -974,24 +974,39 @@ const IMAGE_EXT_REGEX = /\.(jpe?g|png|webp|gif)$/i;
 async function tryShowProductImage(row){
   if(!imageDirHandle){ hideProductImage(); return; }
   const parentCol = findColumnByKeywords(headers, ['cha']);
-  if(!parentCol){ hideProductImage(); return; }
+  if(!parentCol){
+    hideProductImage();
+    console.warn('[ảnh sản phẩm] Không tìm thấy cột nào có chữ "cha" trong tiêu đề file.');
+    return;
+  }
   const parentCode = (row.values[parentCol] || '').trim();
   if(!parentCode){ hideProductImage(); return; }
 
   try{
     const subDir = await imageDirHandle.getDirectoryHandle(parentCode);
+    let found = false;
     for await (const [name, handle] of subDir.entries()){
       if(handle.kind === 'file' && IMAGE_EXT_REGEX.test(name)){
         const file = await handle.getFile();
         const url = URL.createObjectURL(file);
         showProductImage(url);
-        return;
+        found = true;
+        break;
       }
     }
-    hideProductImage(); // có thư mục nhưng không có ảnh hợp lệ bên trong
+    if(!found){
+      hideProductImage();
+      showImageNotice(`Thư mục "${parentCode}" có tồn tại nhưng không có file ảnh hợp lệ (.jpg/.png/.webp/.gif) bên trong.`);
+    }
   }catch(e){
-    hideProductImage(); // không có thư mục con đúng tên mã cha này - bỏ qua im lặng
+    hideProductImage();
+    showImageNotice(`Không tìm thấy thư mục con tên đúng bằng "${parentCode}" trong thư mục ảnh đã chọn.`);
+    console.warn('[ảnh sản phẩm] Lỗi khi mở thư mục:', parentCode, e);
   }
+}
+
+function showImageNotice(text){
+  el('imageFolderStatus').textContent = text;
 }
 
 function showProductImage(url){

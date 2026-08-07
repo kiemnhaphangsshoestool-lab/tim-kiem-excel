@@ -607,7 +607,7 @@
     </div>
     <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--ink-soft);">
       <input type="checkbox" id="searchByNameToggle" style="width:14px;height:14px;">
-      Tìm cả theo tên sản phẩm (chậm hơn với file lớn)
+      Tìm cả theo tên sản phẩm (dò gần đúng, chậm hơn) — mặc định chỉ khớp <b>chính xác</b> mã hàng/mã cha/mã vạch
     </label>
     <div id="resultsCount"></div>
     <div class="source-row" id="groupSpeakRow" style="display:none; margin-top:6px;">
@@ -634,20 +634,28 @@
 
 <script>
 let headers = [];
-let rows = []; // mỗi row: {values: {col: val}, _codeCache, _fullCache}
+let rows = []; // mỗi row: {values: {col: val}, _fullCache}
+let codeExactIndex = {}; // { "giá trị mã viết thường": [row, row, ...] } - tra cứu O(1) theo mã
 
-// Các cột được coi là "mã" (mã hàng, mã sản phẩm cha, mã vạch, mã biến thể...) - ưu tiên tìm nhanh
+// Các cột được coi là "mã" (mã hàng, mã sản phẩm cha, mã vạch, mã biến thể...)
 function codeColumnsOf(hdrs){
   return hdrs.filter(h => h.toLowerCase().includes('mã'));
 }
 
-// Tính trước (1 lần khi tải dữ liệu) chuỗi tìm kiếm viết thường cho từng dòng, để lúc gõ phím
-// không phải toLowerCase() hàng chục nghìn ô mỗi lần - đây là nguyên nhân chính gây lag với file lớn.
+// Tính trước (1 lần khi tải dữ liệu): bảng tra cứu chính xác theo từng giá trị mã, và chuỗi
+// tìm theo tên (dùng khi bật tuỳ chọn "tìm cả theo tên"). Nhờ vậy lúc gõ phím không phải quét
+// lại toàn bộ hàng chục nghìn dòng mỗi lần - đây là nguyên nhân chính gây lag với file lớn.
 function buildSearchCache(){
   const codeCols = codeColumnsOf(headers);
+  codeExactIndex = {};
   rows.forEach(row => {
-    row._codeCache = codeCols.map(c => (row.values[c] || '')).join(' ').toLowerCase();
     row._fullCache = Object.values(row.values).join(' ').toLowerCase();
+    codeCols.forEach(c => {
+      const val = (row.values[c] || '').trim().toLowerCase();
+      if(!val) return;
+      if(!codeExactIndex[val]) codeExactIndex[val] = [];
+      if(!codeExactIndex[val].includes(row)) codeExactIndex[val].push(row);
+    });
   });
 }
 let html5QrCode = null;
@@ -893,17 +901,21 @@ function renderResults(query){
     return;
   }
 
-  // So khớp bằng cache đã tính trước (viết thường sẵn) thay vì tính lại mỗi lần gõ - nhanh hơn
-  // nhiều với file lớn. Mặc định chỉ tìm trong các cột MÃ (mã hàng/mã cha/mã vạch); bật tuỳ chọn
-  // "Tìm cả theo tên" mới quét thêm toàn bộ nội dung (chậm hơn vì phải quét nhiều chữ hơn).
+  // Tìm theo mã: khớp CHÍNH XÁC (tra bảng, không dò chuỗi con) - vừa đúng yêu cầu, vừa nhanh vì
+  // không cần quét từng dòng. Vẫn xử lý trường hợp giọng nói đọc rời từng số ("7 0 0 4" -> "7004")
+  // bằng cách thử thêm bản đã bỏ khoảng trắng/dấu câu nếu tra thẳng không ra.
   const qCompact = q.replace(/[\s,.\-]+/g, '');
   const searchByName = el('searchByNameToggle').checked;
-  const filtered = q ? rows.filter(r => {
-    const cache = searchByName ? r._fullCache : r._codeCache;
-    if(cache.includes(q)) return true;
-    if(qCompact.length >= 3 && cache.replace(/[\s,.\-]+/g, '').includes(qCompact)) return true;
-    return false;
-  }) : rows;
+
+  let filtered;
+  if(!q){
+    filtered = rows;
+  }else if(searchByName){
+    // Tìm theo tên: vẫn dò chuỗi con trong toàn bộ nội dung (chấp nhận chậm hơn, phạm vi rộng hơn)
+    filtered = rows.filter(r => r._fullCache.includes(q));
+  }else{
+    filtered = codeExactIndex[q] || codeExactIndex[qCompact] || [];
+  }
   el('resultsCount').textContent = `${filtered.length} / ${rows.length} kết quả`;
 
   if(!filtered.length){

@@ -757,18 +757,35 @@ function getAllowedEmails(){
 // Hiển thị đúng origin hiện tại để người dùng khai báo trong Google Cloud Console
 el('originHint').textContent = window.location.origin !== 'null' ? window.location.origin : '(mở file này qua http/https, vd host trên GitHub Pages, để lấy được địa chỉ)';
 
-// Khôi phục Client ID đã lưu trước đó
+// Khôi phục Client ID đã lưu trước đó — CHỜ thư viện Google Identity Services (GSI) tải xong hẳn
+// rồi mới thiết lập, tránh trường hợp trang vừa mở đã gọi google.accounts trong khi script GSI
+// (tải kiểu async) chưa kịp sẵn sàng, khiến nút đăng nhập bị khoá âm thầm không rõ lý do.
 const savedClientId = localStorage.getItem('tke_client_id');
+if(savedClientId){ el('clientIdInput').value = savedClientId; }
+
+function waitForGoogleIdentityServices(callback, attemptsLeft = 25){
+  if(window.google && google.accounts && google.accounts.oauth2){
+    callback();
+    return;
+  }
+  if(attemptsLeft <= 0){
+    el('authStatus').textContent = '✗ Không tải được thư viện đăng nhập Google. Kiểm tra mạng/trình chặn quảng cáo có chặn accounts.google.com không, rồi tải lại trang.';
+    return;
+  }
+  setTimeout(() => waitForGoogleIdentityServices(callback, attemptsLeft - 1), 200);
+}
+
 if(savedClientId){
-  el('clientIdInput').value = savedClientId;
-  setupTokenClient(savedClientId);
+  el('authStatus').textContent = 'Đang tải thư viện đăng nhập Google...';
+  waitForGoogleIdentityServices(() => setupTokenClient(savedClientId));
 }
 
 el('saveClientId').addEventListener('click', () => {
   const id = el('clientIdInput').value.trim();
   if(!id){ return; }
   localStorage.setItem('tke_client_id', id);
-  setupTokenClient(id);
+  el('authStatus').textContent = 'Đang tải thư viện đăng nhập Google...';
+  waitForGoogleIdentityServices(() => setupTokenClient(id));
 });
 
 function setupTokenClient(clientId){
@@ -811,8 +828,23 @@ function setupTokenClient(clientId){
 }
 
 el('googleSignInBtn').addEventListener('click', () => {
-  if(!tokenClient){ return; }
-  tokenClient.requestAccessToken({ prompt: accessToken ? '' : 'consent' });
+  if(!tokenClient){
+    el('authStatus').textContent = '✗ Chưa sẵn sàng — kiểm tra đã lưu Client ID (Bước 1) chưa, hoặc đợi vài giây rồi thử lại.';
+    return;
+  }
+  el('authStatus').textContent = 'Đang mở cửa sổ đăng nhập Google...';
+  // Nếu sau 4 giây trạng thái vẫn không đổi, nhiều khả năng cửa sổ popup bị trình duyệt chặn
+  const popupCheckTimer = setTimeout(() => {
+    if(el('authStatus').textContent === 'Đang mở cửa sổ đăng nhập Google...'){
+      el('authStatus').textContent = 'Chưa thấy phản hồi — nếu bạn đang thao tác trong cửa sổ đăng nhập thì cứ tiếp tục; nếu không thấy cửa sổ nào mở lên, trình duyệt có thể đã chặn popup, hãy cho phép rồi bấm lại.';
+    }
+  }, 6000);
+  try{
+    tokenClient.requestAccessToken({ prompt: accessToken ? '' : 'consent' });
+  }catch(e){
+    clearTimeout(popupCheckTimer);
+    el('authStatus').textContent = '✗ Lỗi khi mở đăng nhập: ' + e.message;
+  }
 });
 
 function extractSpreadsheetId(url){

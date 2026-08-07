@@ -601,10 +601,14 @@
   <div class="search-wrap">
     <div class="search-box">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B1F1C" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" id="searchBox" placeholder="Gõ từ khoá hoặc mã vạch..." autocomplete="off">
+      <input type="text" id="searchBox" placeholder="Gõ mã hàng, mã cha, hoặc mã vạch..." autocomplete="off">
       <button class="mic-btn" id="micBtn">🎤 Nói</button>
       <button class="scan-btn" id="scanBtn">📷 Quét</button>
     </div>
+    <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--ink-soft);">
+      <input type="checkbox" id="searchByNameToggle" style="width:14px;height:14px;">
+      Tìm cả theo tên sản phẩm (chậm hơn với file lớn)
+    </label>
     <div id="resultsCount"></div>
     <div class="source-row" id="groupSpeakRow" style="display:none; margin-top:6px;">
       <button class="btn btn-primary" id="groupSpeakBtn" style="padding:8px 14px;font-size:13px;">🔊 Đọc khoảng giá (thấp nhất – cao nhất)</button>
@@ -630,7 +634,22 @@
 
 <script>
 let headers = [];
-let rows = []; // mỗi row: {values: {col: val}}
+let rows = []; // mỗi row: {values: {col: val}, _codeCache, _fullCache}
+
+// Các cột được coi là "mã" (mã hàng, mã sản phẩm cha, mã vạch, mã biến thể...) - ưu tiên tìm nhanh
+function codeColumnsOf(hdrs){
+  return hdrs.filter(h => h.toLowerCase().includes('mã'));
+}
+
+// Tính trước (1 lần khi tải dữ liệu) chuỗi tìm kiếm viết thường cho từng dòng, để lúc gõ phím
+// không phải toLowerCase() hàng chục nghìn ô mỗi lần - đây là nguyên nhân chính gây lag với file lớn.
+function buildSearchCache(){
+  const codeCols = codeColumnsOf(headers);
+  rows.forEach(row => {
+    row._codeCache = codeCols.map(c => (row.values[c] || '')).join(' ').toLowerCase();
+    row._fullCache = Object.values(row.values).join(' ').toLowerCase();
+  });
+}
 let html5QrCode = null;
 
 const el = (id) => document.getElementById(id);
@@ -651,6 +670,7 @@ function restoreState(){
     if(h && r){
       headers = JSON.parse(h);
       rows = JSON.parse(r);
+      buildSearchCache();
       setStatus(true, s || 'Dữ liệu đã lưu trước đó');
       renderResults('');
     }
@@ -825,6 +845,7 @@ function loadFromArray(arr, sourceLabel){
   }).filter(row => Object.values(row.values).some(v => v.trim() !== ''));
 
   applyStockOverrides();
+  buildSearchCache();
 
   setStatus(true, sourceLabel, rows.length);
   saveState(sourceLabel);
@@ -872,15 +893,17 @@ function renderResults(query){
     return;
   }
 
-  // So khớp bình thường, và thêm so khớp "rút gọn" (bỏ hết khoảng trắng) để xử lý
-  // trường hợp giọng nói đọc từng chữ số rời rạc ra thành "7 0 0 4" thay vì "7004"
+  // So khớp bằng cache đã tính trước (viết thường sẵn) thay vì tính lại mỗi lần gõ - nhanh hơn
+  // nhiều với file lớn. Mặc định chỉ tìm trong các cột MÃ (mã hàng/mã cha/mã vạch); bật tuỳ chọn
+  // "Tìm cả theo tên" mới quét thêm toàn bộ nội dung (chậm hơn vì phải quét nhiều chữ hơn).
   const qCompact = q.replace(/[\s,.\-]+/g, '');
-  const filtered = q ? rows.filter(r => Object.values(r.values).some(v => {
-    const vLower = v.toLowerCase();
-    if(vLower.includes(q)) return true;
-    if(qCompact.length >= 3 && vLower.replace(/[\s,.\-]+/g, '').includes(qCompact)) return true;
+  const searchByName = el('searchByNameToggle').checked;
+  const filtered = q ? rows.filter(r => {
+    const cache = searchByName ? r._fullCache : r._codeCache;
+    if(cache.includes(q)) return true;
+    if(qCompact.length >= 3 && cache.replace(/[\s,.\-]+/g, '').includes(qCompact)) return true;
     return false;
-  })) : rows;
+  }) : rows;
   el('resultsCount').textContent = `${filtered.length} / ${rows.length} kết quả`;
 
   if(!filtered.length){
@@ -1063,7 +1086,13 @@ function openEditStockPrompt(row){
   renderResults(el('searchBox').value);
 }
 
-el('searchBox').addEventListener('input', (e) => renderResults(e.target.value));
+let searchDebounceTimer = null;
+el('searchBox').addEventListener('input', (e) => {
+  clearTimeout(searchDebounceTimer);
+  const val = e.target.value;
+  searchDebounceTimer = setTimeout(() => renderResults(val), 150);
+});
+el('searchByNameToggle').addEventListener('change', () => renderResults(el('searchBox').value));
 
 // ---------- Thư mục ảnh sản phẩm trên máy (File System Access API) ----------
 let imageDirHandle = null;

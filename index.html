@@ -353,6 +353,22 @@
   }
   .speak-btn:hover{box-shadow:0 4px 12px rgba(242,169,0,0.5);}
   .speak-btn:active{transform:scale(0.9);}
+  .edit-btn{
+    flex-shrink:0;
+    background:#fff;
+    border:1.5px solid var(--steel);
+    border-radius:50%;
+    width:36px;
+    height:36px;
+    font-size:15px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    margin-right:6px;
+    transition:transform .1s ease;
+  }
+  .edit-btn:active{transform:scale(0.9);}
   .tag-rows{
     padding-left:6px;
     display:grid;
@@ -513,6 +529,7 @@
       <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
       <button class="btn" id="togglePrivateInput">🔒 Google Sheet riêng tư</button>
       <button class="btn btn-ghost" id="clearBtn">Xoá dữ liệu</button>
+      <button class="btn btn-ghost" id="clearOverridesBtn">Xoá cập nhật tạm</button>
     </div>
 
     <div class="source-row" style="margin-top:8px;">
@@ -807,6 +824,8 @@ function loadFromArray(arr, sourceLabel){
     return {values};
   }).filter(row => Object.values(row.values).some(v => v.trim() !== ''));
 
+  applyStockOverrides();
+
   setStatus(true, sourceLabel, rows.length);
   saveState(sourceLabel);
   el('searchBox').value = '';
@@ -821,6 +840,15 @@ el('clearBtn').addEventListener('click', () => {
   setStatus(false, 'Chưa có dữ liệu');
   el('searchBox').value='';
   renderResults('');
+});
+
+el('clearOverridesBtn').addEventListener('click', () => {
+  if(!confirm('Xoá toàn bộ cập nhật tồn kho tạm đã lưu trên trình duyệt này? Không ảnh hưởng file/Sheet gốc.')) return;
+  localStorage.removeItem(STOCK_OVERRIDE_KEY);
+  const idx = headers.indexOf(STOCK_EDIT_TIME_COL);
+  if(idx !== -1) headers.splice(idx, 1);
+  setStatus(true, localStorage.getItem('tke_source') || '', rows.length);
+  renderResults(el('searchBox').value);
 });
 
 // ---------- Tìm kiếm ----------
@@ -891,9 +919,13 @@ function renderResults(query){
       ? `<details class="tag-more"><summary>Xem thêm chi tiết</summary><div class="tag-rows">${otherHtml}</div></details>`
       : '';
 
+    const stockCol = findColumnByKeywords(headers, ['tồn kho', 'tồn', 'số lượng', ' sl']);
+    const editBtn = stockCol ? `<button class="edit-btn" data-idx="${i}" title="Sửa tồn kho tạm">✏️</button>` : '';
+
     return `<div class="tag-card">
       <div class="tag-title-row">
         <div class="tag-title">${highlight(title, q)}</div>
+        ${editBtn}
         <button class="speak-btn" data-idx="${i}" title="Đọc to sản phẩm này">🔊</button>
       </div>
       <div class="tag-rows">${priorityHtml}</div>
@@ -949,17 +981,87 @@ function isSamePriceGroup(groupRows){
 
 // Bấm nút loa trên từng thẻ kết quả -> đọc ngay lập tức (luôn hoạt động vì là cú bấm tay trực tiếp)
 el('results').addEventListener('click', (e) => {
-  const btn = e.target.closest('.speak-btn');
-  if(!btn) return;
-  const idx = parseInt(btn.dataset.idx, 10);
-  const row = (window.__lastFiltered || [])[idx];
-  if(row) announceRow(row);
+  const speakBtn = e.target.closest('.speak-btn');
+  if(speakBtn){
+    const row = (window.__lastFiltered || [])[parseInt(speakBtn.dataset.idx, 10)];
+    if(row) announceRow(row);
+    return;
+  }
+  const editBtn = e.target.closest('.edit-btn');
+  if(editBtn){
+    const row = (window.__lastFiltered || [])[parseInt(editBtn.dataset.idx, 10)];
+    if(row) openEditStockPrompt(row);
+  }
 });
 
 // Bấm nút đọc khoảng giá cả nhóm (cùng mã cha)
 el('groupSpeakBtn').addEventListener('click', () => {
   if(window.__lastGroup) announceGroup(window.__lastGroup);
 });
+
+// ---------- Sửa tồn kho tạm thời: lưu vào localStorage (KHÔNG đụng file gốc), kèm giờ sửa ----------
+const STOCK_OVERRIDE_KEY = 'tke_stock_overrides';
+const STOCK_EDIT_TIME_COL = 'Ngày sửa tồn kho (tạm)';
+
+function rowOverrideKey(row, stockCol){
+  return headers.filter(h => h !== stockCol).map(h => row.values[h] || '').join('|');
+}
+
+function loadStockOverrides(){
+  try{ return JSON.parse(localStorage.getItem(STOCK_OVERRIDE_KEY) || '{}'); }
+  catch(e){ return {}; }
+}
+
+function saveStockOverrides(map){
+  localStorage.setItem(STOCK_OVERRIDE_KEY, JSON.stringify(map));
+}
+
+// Áp lại các lần sửa đã lưu vào dữ liệu vừa tải (gọi trong loadFromArray)
+function applyStockOverrides(){
+  const stockCol = findColumnByKeywords(headers, ['tồn kho', 'tồn', 'số lượng', ' sl']);
+  if(!stockCol) return;
+  const overrides = loadStockOverrides();
+  if(!Object.keys(overrides).length) return;
+
+  if(!headers.includes(STOCK_EDIT_TIME_COL)) headers.push(STOCK_EDIT_TIME_COL);
+
+  rows.forEach(row => {
+    const key = rowOverrideKey(row, stockCol);
+    const found = overrides[key];
+    if(found){
+      row.values[stockCol] = found.value;
+      row.values[STOCK_EDIT_TIME_COL] = found.time;
+    }
+  });
+}
+
+function openEditStockPrompt(row){
+  const stockCol = findColumnByKeywords(headers, ['tồn kho', 'tồn', 'số lượng', ' sl']);
+  if(!stockCol) return;
+  const nameCol = headers[0];
+  const current = row.values[stockCol] || '';
+  const input = window.prompt(
+    `${row.values[nameCol] || ''}\n\nNhập số tồn kho mới (chỉ lưu tạm trên trình duyệt này, kèm giờ sửa, không đụng file gốc):`,
+    current
+  );
+  if(input === null) return; // bấm Huỷ
+
+  const newValue = input.trim();
+  const now = new Date();
+  const timeStr = now.toLocaleString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+
+  row.values[stockCol] = newValue;
+  if(!headers.includes(STOCK_EDIT_TIME_COL)) headers.push(STOCK_EDIT_TIME_COL);
+  row.values[STOCK_EDIT_TIME_COL] = timeStr;
+
+  const overrides = loadStockOverrides();
+  const key = rowOverrideKey(row, stockCol);
+  overrides[key] = { value: newValue, time: timeStr };
+  saveStockOverrides(overrides);
+  saveState(localStorage.getItem('tke_source') || '');
+
+  renderResults(el('searchBox').value);
+}
 
 el('searchBox').addEventListener('input', (e) => renderResults(e.target.value));
 
